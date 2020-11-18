@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+      PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+   "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+   
+<mapper namespace="mapper.board">
+
+	<!-- property가 vo에 있는 이름이고, column이 sql문에 있는 이름임!!! -->
+	<resultMap id="articlesResult" type="articleVO">
+		<result property="level" column="lvl" />
+		<result property="articleNO" column="articleNO" />
+		<result property="parentNO" column="parentNO" />
+		<result property="title" column="title" />
+		<result property="content" column="content" />
+		<result property="imageFileName" column="imageFileName" />
+		<result property="id" column="id" />
+		<result property="writeDate" column="writeDate" />
+		<result property="views" column="views" />
+	</resultMap>
+	
+	<resultMap id="imagesResult" type="imageVO">
+		<result property="imageFileNO" column="imageFileNO" />
+		<result property="imageFileName" column="imageFileName" />
+		<result property="regDate" column="regDate" />
+		<result property="articleNO" column="articleNO" />
+	</resultMap>
+	
+	<select id="selectTotArticle" resultType="int">
+		<![CDATA[ 
+			SELECT COUNT(articleNO) FROM t_Board
+		]]>
+	</select>
+	
+	<select id="selectAllArticleByPage" resultMap="articlesResult" parameterType="hashMap">
+		<![CDATA[ 
+			SELECT lvl, articleNO, parentNO, title, id, writeDate, views FROM (
+				SELECT ROWNUM as recNum, lvl, articleNO, parentNO, title, id, writeDate, views
+				FROM (
+						SELECT level AS lvl, articleNO, parentNO, title, id, writeDate, views
+						FROM t_Board
+						START WITH parentNO=0
+						CONNECT BY PRIOR articleNO=parentNO
+						ORDER SIBLINGS BY articleNO DESC 
+					)
+				)
+			WHERE recNum BETWEEN(#{section}-1)*100+(#{pageNum}-1)*10+1 AND (#{section}-1)*100+#{pageNum}*10
+		]]>
+	</select>
+	
+	<!-- 이미지 파일은 더 이상 사용하지 않으므로 null을 입력한다.-->
+	<insert id="insertArticle" parameterType="java.util.Map">
+		<![CDATA[ 
+			INSERT INTO t_Board (articleNO, parentNO, title, content, imageFileName, id)
+			VALUES (#{articleNO}, #{parentNO}, #{title}, #{content}, null, #{id})
+		]]>
+	</insert>
+	
+	<select id="selectNewArticleNO" resultType="int">
+		<![CDATA[ 
+			SELECT NVL(MAX(articleNO), 0) FROM t_Board
+		]]>
+	</select>
+	
+	<select id="selectArticle" parameterType="int" resultType="articleVO">
+		<![CDATA[ 
+			SELECT * FROM t_Board
+			WHERE articleNO=#{articleNO}
+		]]>
+	</select>
+	
+	<delete id="deleteArticle" parameterType="int">
+		<![CDATA[ 
+			DELETE FROM t_Board
+			WHERE articleNO IN (
+									SELECT articleNO FROM t_Board
+									START WITH articleNO=#{articleNO}
+									CONNECT BY articleNO=parentNO
+								)
+		]]>
+	</delete>
+	
+	<!-- 이미지는 이미지 테이블에서 수정할거임-->
+	<update id="updateArticle"  parameterType="java.util.Map">
+		UPDATE t_board
+		SET title=#{title},	content=#{content}
+		WHERE articleNO=#{articleNO}
+	</update>
+	
+	<update id="updateImage" parameterType="java.util.List">
+		<foreach item="item" collection="list" separator=";" open="DECLARE BEGIN" close="; END;">
+        	UPDATE t_imageFile
+        	SET imageFileName=#{item.imageFileName}
+        	WHERE imageFileNO=#{item.imageFileNO}
+    	</foreach>
+	</update>
+	
+	<!-- 한꺼번에 여러 개의 레코드를 추가합니다.-->
+	<insert id="insertImage" parameterType="java.util.List">
+		<foreach item="item" collection="list" open="INSERT ALL" separator=" " close="SELECT * FROM DUAL">
+			INTO t_imageFile(imageFileNO, imageFileName, articleNO)
+			VALUES (#{item.imageFileNO}, #{item.imageFileName}, #{item.articleNO})
+		</foreach>
+	</insert>
+	
+	<!-- 새로 추가할 이미지 정보의 이미지 번호를 가져옵니다. 
+		NVL("값","지정값") : 값이 null인 경우 지정값을 출력
+	-->
+	<select id="selectNewImageNO" resultType="int">
+		<![CDATA[ 
+			SELECT NVL(MAX(imageFileNO), 0) FROM t_imageFile
+		]]>
+	</select>
+	
+	<!-- 이미지 테이블에서 글 번호에 대한 이미지 파일 정보를 조회합니다. -->
+	<select id="selectImage" resultMap="imagesResult" parameterType="int">
+		<![CDATA[ 
+			SELECT * FROM t_imageFile
+			WHERE articleNO=#{articleNO}
+		]]>
+	</select>
+	
+	<!-- 조회수 쿼리(조회수를 1 업데이트) -->
+	<update id="updateViews" parameterType="int">
+		<![CDATA[ 
+			UPDATE t_Board 
+			SET views=views+1
+			WHERE articleNO=#{articleNO}
+		]]>
+	</update>
+</mapper>
